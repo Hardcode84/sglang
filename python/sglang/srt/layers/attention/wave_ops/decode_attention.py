@@ -111,6 +111,59 @@ def get_wave_kernel(
 
     return phase_0, phase_1
 
+@functools.lru_cache(maxsize=4096)
+def get_triton_kernel(
+    B,
+    H_Q,
+    D_V,
+    device
+):
+    import torch
+    from sglang.srt.layers.attention.triton_ops.decode_attention import (
+        decode_attention_fwd as triton_decode_attention_fwd,
+    )
+
+    def func(
+            q,
+            k_buffer,
+            v_buffer,
+            o_triton,
+            b_req_idx,
+            req_to_token,
+            num_kv_splits,
+            max_kv_splits,
+            sm_scale,
+            B=B,
+            H_Q=H_Q,
+            D_V=D_V,
+            device=device,
+            ):
+        attn_logits = torch.empty(
+            (B, H_Q, max_kv_splits, D_V + 1),
+            dtype=torch.float32,
+            device=device,
+        )
+        attn_lse = torch.empty(
+            (B, H_Q, max_kv_splits),
+            dtype=torch.float32,
+            device=device,
+        )
+        triton_decode_attention_fwd(
+            q,
+            k_buffer,
+            v_buffer,
+            o_triton,
+            b_req_idx,
+            req_to_token,
+            attn_logits,
+            attn_lse,
+            num_kv_splits,
+            max_kv_splits,
+            sm_scale,
+        )
+        torch.cuda.synchronize()
+
+    return func
 
 def view_trunc(tensor, shape):
     size = math.prod(shape)
@@ -146,6 +199,8 @@ def decode_attention_wave(
         seq_len,
     )
 
+    k_buffer_orig = k_buffer
+    v_buffer_orig = v_buffer
     k_buffer = view_trunc(k_buffer, (num_seqs, seq_len, num_kv_heads, head_size))
     v_buffer = view_trunc(v_buffer, (num_seqs, seq_len, num_kv_heads, head_size_kv))
 
@@ -170,6 +225,37 @@ def decode_attention_wave(
         filename = f"wave_decode_attention_phase1_{'x'.join(map(str, shape))}.mlir"
         with open(filename, "w") as f:
             f.write(mb_sv.module_op.get_asm())
+
+    import torch
+    if torch.cuda.is_current_stream_capturing():
+        return
+
+    o_triton = torch.zeros_like(o)
+    B, H_Q, D_V = q.shape[0], q.shape[1], o.shape[2]
+    triton_func = get_triton_kernel(
+        B,
+        H_Q,
+        D_V,
+        q.device,
+    )
+    triton_func(
+        q,
+        k_buffer_orig,
+        v_buffer_orig,
+        o_triton,
+        b_req_idx,
+        req_to_token,
+        num_kv_splits,
+        max_kv_splits,
+        sm_scale,
+    )
+    try:
+        torch.testing.assert_close(o_triton, o, atol=1e-2, rtol=1e-2)
+    except Exception as e:
+        logger.error("Triton and Wave outputs do not match")
+        logger.error(f"shape: {shape}, max_kv_splits: {max_kv_splits}")
+        logger.error(f"{e}")
+        # raise
 
 
 def decode_attention_fwd(
