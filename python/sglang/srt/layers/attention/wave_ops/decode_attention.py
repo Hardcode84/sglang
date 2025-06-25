@@ -119,6 +119,9 @@ def view_trunc(tensor, shape):
     return tensor.view(-1)[:size].view(shape)
 
 
+from collections import defaultdict
+_shapes_count = defaultdict(int)
+
 def decode_attention_wave(
     q,
     k_buffer,
@@ -147,7 +150,9 @@ def decode_attention_wave(
         num_seqs,
         seq_len,
     )
-
+    if shape not in _shapes_count:
+        logger.info(f"Wave decode attention shape: {shape}")
+    _shapes_count[shape] += 1
     k_buffer = view_trunc(k_buffer, (num_seqs, seq_len, num_kv_heads, head_size))
     v_buffer = view_trunc(v_buffer, (num_seqs, seq_len, num_kv_heads, head_size_kv))
 
