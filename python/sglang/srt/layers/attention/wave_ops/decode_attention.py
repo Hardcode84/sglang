@@ -118,6 +118,7 @@ def view_trunc(tensor, shape):
     size = math.prod(shape)
     return tensor.view(-1)[:size].view(shape)
 
+_counter = 0
 
 def decode_attention_wave(
     q,
@@ -147,6 +148,16 @@ def decode_attention_wave(
         num_seqs,
         seq_len,
     )
+    global _counter
+    if _counter == 0:
+        pid = os.getpid()
+        import torch
+        torch.save(q, f"dump/q_{pid}.pt")
+        torch.save(k_buffer, f"dump/k_buffer_{pid}.pt")
+        torch.save(v_buffer, f"dump/v_buffer_{pid}.pt")
+        torch.save(b_req_idx, f"dump/b_req_idx_{pid}.pt")
+        torch.save(req_to_token, f"dump/req_to_token_{pid}.pt")
+    _counter += 1
 
     k_buffer = view_trunc(k_buffer, (num_seqs, seq_len, num_kv_heads, head_size))
     v_buffer = view_trunc(v_buffer, (num_seqs, seq_len, num_kv_heads, head_size_kv))

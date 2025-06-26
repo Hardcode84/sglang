@@ -181,20 +181,33 @@ class TestWaveAttention(unittest.TestCase):
         num_kv_splits = torch.full((B,), 4, dtype=torch.int32, device="cuda")
 
         # q represents the new token being generated, one per batch
-        q = torch.randn(B, H_Q, D, dtype=dtype, device="cuda")
+        # q = torch.randn(B, H_Q, D, dtype=dtype, device="cuda")
 
-        # k_buffer and v_buffer represent all previous tokens
-        k_buffer = torch.randn(total_tokens, H_KV, D, dtype=dtype, device="cuda")
-        v_buffer = torch.randn(total_tokens, H_KV, D_V, dtype=dtype, device="cuda")
+        # # k_buffer and v_buffer represent all previous tokens
+        # k_buffer = torch.randn(total_tokens, H_KV, D, dtype=dtype, device="cuda")
+        # v_buffer = torch.randn(total_tokens, H_KV, D_V, dtype=dtype, device="cuda")
+
+
+        # req_to_token = torch.arange(total_tokens, device="cuda", dtype=torch.int32)
+        # b_req_idx = torch.zeros(B + 1, device="cuda", dtype=torch.int32)
+        # b_seq_len = torch.full((B,), seq_len, device="cuda", dtype=torch.int32)
+        # b_req_idx[1 : B + 1] = torch.cumsum(b_seq_len, dim=0)
+
+        pid = 1
+        q = torch.load(f"../dump/q_{pid}.pt")
+        k_buffer = torch.load(f"../dump/k_buffer_{pid}.pt")
+        v_buffer = torch.load(f"../dump/v_buffer_{pid}.pt")
+        b_req_idx = torch.load(f"../dump/b_req_idx_{pid}.pt")
+        req_to_token = torch.load(f"../dump/req_to_token_{pid}.pt")
+
+        B, H_Q, D = q.shape
+        _, H_KV, D_V = k_buffer.shape
+        _, _, D_V = v_buffer.shape
 
         # o will have the same shape as q
-        o_triton = torch.zeros(B, H_Q, D_V, dtype=dtype, device="cuda")
-        o = torch.zeros(B, H_Q, D_V, dtype=dtype, device="cuda")
+        o_triton = torch.zeros_like(q)
+        o = torch.zeros_like(q)
 
-        req_to_token = torch.arange(total_tokens, device="cuda", dtype=torch.int32)
-        b_req_idx = torch.zeros(B + 1, device="cuda", dtype=torch.int32)
-        b_seq_len = torch.full((B,), seq_len, device="cuda", dtype=torch.int32)
-        b_req_idx[1 : B + 1] = torch.cumsum(b_seq_len, dim=0)
 
         attn_logits = torch.empty(
             (B, H_Q, max_kv_splits, D_V + 1),
