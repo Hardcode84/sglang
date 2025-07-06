@@ -156,7 +156,8 @@ def decode_attention_wave(
     phase_0, phase_1 = get_wave_kernel(
         shape, max_kv_splits, q.dtype, o.dtype, logit_cap
     )
-
+    import time
+    t1 = time.time()
     mb_qk = phase_0(
         q,
         k_buffer,
@@ -166,12 +167,17 @@ def decode_attention_wave(
         attn_logits,
         attn_logits_max,
     )
+    t2 = time.time()
+    print(f"phase 0 time: {t2 - t1:.8f}s")
     if dump_generated_mlir:
         filename = f"wave_decode_attention_phase0_{'x'.join(map(str, shape))}.mlir"
         with open(filename, "w") as f:
             f.write(mb_qk.module_op.get_asm())
 
+    t1 = time.time()
     mb_sv = phase_1(attn_logits, attn_logits_max, b_req_idx, o)
+    t2 = time.time()
+    print(f"phase 1 time: {t2 - t1:.8f}s")
     if dump_generated_mlir:
         filename = f"wave_decode_attention_phase1_{'x'.join(map(str, shape))}.mlir"
         with open(filename, "w") as f:

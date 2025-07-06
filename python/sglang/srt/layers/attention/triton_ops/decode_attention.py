@@ -649,6 +649,8 @@ def decode_attention_fwd_grouped(
     sm_scale,
     logit_cap=0.0,
 ):
+    import time
+    t1 = time.time()
     _decode_grouped_att_m_fwd(
         q,
         k_buffer,
@@ -662,6 +664,9 @@ def decode_attention_fwd_grouped(
         sm_scale,
         logit_cap,
     )
+    t2 = time.time()
+    print(f"triton phase 0 time: {t2 - t1:.8f}s")
+    t1 = time.time()
     _decode_softmax_reducev_fwd(
         attn_logits,
         attn_lse,
@@ -672,7 +677,8 @@ def decode_attention_fwd_grouped(
         num_kv_splits,
         max_kv_splits,
     )
-
+    t2 = time.time()
+    print(f"triton phase 1 time: {t2 - t1:.8f}s")
 
 def decode_attention_fwd(
     q,
