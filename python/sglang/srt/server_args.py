@@ -357,6 +357,12 @@ class ServerArgs:
             None,
         }, "moe_dense_tp_size only support 1 and None currently"
 
+        if self.attention_backend == "wave":
+            logger.warning(
+                "Cuda graph is disabled for wave backend"
+            )
+            self.disable_cuda_graph = True
+
         if self.attention_backend == "flashmla":
             logger.warning(
                 "FlashMLA only supports a page_size of 64, change page_size to 64."
